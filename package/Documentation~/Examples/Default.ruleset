@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="DraasGames Unity ordering" Description="Merge with an existing consumer ruleset" ToolsVersion="15.0">
+  <Rules AnalyzerId="DraasGames.Unity.Analyzers" RuleNamespace="DraasGames.Unity.Analyzers">
+    <Rule Id="DGUA001" Action="Warning" />
+    <Rule Id="DGUA002" Action="Warning" />
+  </Rules>
+</RuleSet>

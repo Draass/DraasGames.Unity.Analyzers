@@ -1,0 +1,6 @@
+# Merge this section into the consumer project's root .editorconfig.
+[*.cs]
+dotnet_diagnostic.DGUA001.severity = warning
+dotnet_diagnostic.DGUA002.severity = warning
+draas_unity_serialized_field_placement = first
+draas_unity_callback_order = Reset,OnValidate,Awake,OnEnable,Start,FixedUpdate,Update,LateUpdate,OnDisable,OnDestroy

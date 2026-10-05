@@ -1,0 +1,10 @@
+{
+  "name": "com.draasgames.unity-analyzers",
+  "version": "0.1.0",
+  "displayName": "DraasGames Unity Analyzers",
+  "description": "Configurable Roslyn rules for explicitly serialized fields and Unity callback ordering.",
+  "unity": "2022.3",
+  "author": { "name": "DraasGames" },
+  "license": "UNLICENSED",
+  "keywords": ["roslyn", "analyzers", "style", "unity"]
+}
