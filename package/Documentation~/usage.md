@@ -9,7 +9,7 @@ https://github.com/Draass/DraasGames.Unity.Analyzers.git?path=/package#main
 ```
 
 `Draass` is the GitHub owner, `/package` is the UPM package directory, and `main` is the published branch.
-The package version is `0.1.0`; this does not imply that a matching Git tag exists. There is currently no `v0.1.0` tag.
+The URL uses a branch rather than a version tag; package versions and Git tags are separate.
 Unity's [Git dependency documentation](https://docs.unity3d.com/6000.0/Documentation/Manual/upm-git.html#paths-and-revisions)
 explains the path and revision syntax.
 
@@ -29,13 +29,16 @@ into `Assets/Analyzers/` in the consuming Unity project:
 
 ```ini
 draas_unity_serialized_field_placement = first
+draas_unity_callbacks_before_other_methods = true
 draas_unity_callback_order = Reset,OnValidate,Awake,OnEnable,Start,FixedUpdate,Update,LateUpdate,OnDisable,OnDestroy
 ```
 
 - `draas_unity_serialized_field_placement` accepts `first` or `last`.
+- `draas_unity_callbacks_before_other_methods` accepts `true` (default) or `false`, ignoring surrounding whitespace and letter case.
 - `draas_unity_callback_order` accepts a nonempty, duplicate-free subset or permutation of the ten names above.
 - Callback names and option keys are case-sensitive. Placement values must be lowercase.
-- Callbacks omitted from the configured list are not checked.
+- The configured list controls relative ordering of the ten lifecycle names only. Every recognized Unity method
+  still participates in the leading group when `draas_unity_callbacks_before_other_methods` is true.
 - An invalid value falls back to the built-in default for that option.
 - Blank lines and lines starting with `#` or `;` are ignored. Unknown keys are ignored.
 
@@ -52,6 +55,7 @@ Merge the [EditorConfig example](Examples/editorconfig.txt) into the project's r
 dotnet_diagnostic.DGUA001.severity = warning
 dotnet_diagnostic.DGUA002.severity = warning
 draas_unity_serialized_field_placement = first
+draas_unity_callbacks_before_other_methods = true
 draas_unity_callback_order = Reset,OnValidate,Awake,OnEnable,Start,FixedUpdate,Update,LateUpdate,OnDisable,OnDestroy
 ```
 
@@ -89,28 +93,70 @@ Each violating field declaration gets one diagnostic on its first variable ident
 
 ### DGUA002 - Unity callback order
 
-The analyzer checks direct and indirect subclasses of `UnityEngine.MonoBehaviour` and `UnityEngine.ScriptableObject`.
-For `ScriptableObject`, only `OnValidate`, `Awake`, `OnEnable`, `OnDisable`, and `OnDestroy` are recognized.
+The analyzer uses a semantic callback classifier covering runtime and Editor message hosts, Unity API overrides,
+and Unity interface implementations. It checks full parameter/return types and the appropriate static/instance form.
+This includes parameterized physics, audio, rendering and application messages, serialization callbacks,
+EventSystems handlers and Editor callbacks. See the [callback catalog](unity-callbacks.md) for exact coverage and limits.
 
-Recognized callbacks must be nonstatic, nongeneric, parameterless methods with an implementation and a `void` return type.
-`MonoBehaviour.Start` can also return `System.Collections.IEnumerator` by value.
-Abstract methods, ref returns, and incompatible signatures are ignored.
+By default, every recognized Unity method must precede ordinary methods. Ranked lifecycle callbacks must also follow the configured relative order.
+For example, this declaration order reports DGUA002 on `Awake`:
 
-Callbacks only need to follow the configured relative order. Ordinary methods do not break the sequence.
-A callback that appears after a higher-ranked callback receives a diagnostic on its name.
+```csharp
+private void BindConstruction() { }
+private void Awake() { } // Move before BindConstruction.
+```
+
+Instance, static, generic, override, explicit-interface, and abstract ordinary methods form a boundary unless
+recognized as actual Unity methods. Fields, constructors, properties, and members of nested types do not.
+Methods with invalid callback signatures are ordinary methods. Unity methods omitted from `draas_unity_callback_order`
+remain subject to grouping and have no effect on relative rank. Zenject/user API overrides remain ordinary;
+an override is recognized through its actual Unity-declared contract, not merely because its class inherits MonoBehaviour.
+
+Set `draas_unity_callbacks_before_other_methods = false` to restore the previous behavior and allow helper methods
+before or between callbacks. Relative callback inversions still report DGUA002.
+Each offending callback receives at most one diagnostic on its name. A placement violation takes priority
+over a callback-order violation when both apply; the message identifies the method it should precede.
 
 ### Shared behavior
 
 Generated code is excluded. Nested types and partial declarations are checked independently; the analyzer does not impose an order across files.
-There are no automatic source-reordering fixes in this version, because moving fields can change initializer execution order.
+IDE quick-fixes reorder eligible declarations explicitly, subject to the safety limits below.
+
+## IDE quick-fixes
+
+Use Rider's **Alt+Enter** on DGUA001 to **Group serialized fields**, or on DGUA002 to **Order Unity methods**.
+Each action fixes the selected type declaration. **Fix All** processes the selected diagnostic in a document,
+project or solution. It uses each document's effective settings and does not change suppressed diagnostics.
+
+Field fixes perform a stable first/last grouping of instance field declaration slots. Static fields,
+constants and non-field members retain their slots. Method fixes preserve non-method slots, group Unity
+methods when enabled, and sort ranked callbacks within ranked slots. Ordinary methods and unranked callbacks
+retain their relative order. With callback placement disabled, helper/unranked method slots stay unchanged.
+
+Attributes, comments, XML documentation and method bodies move with their declaration. No changes cross
+partial declarations or enclosing/nested types. Fix All handles nested declarations independently.
+
+Fixes are withheld for types containing directives (`#if`, `#region`, `#pragma`, `#nullable`) or syntax errors.
+The field action is also withheld for structs, types explicitly marked with `StructLayout`, and any permutation
+that changes the relative order of existing instance field, property or field-like event initializers.
+It does not guess whether initializers are pure. For example, moving an uninitialized field past an initialized
+field can be safe, while swapping two initialized fields is not automatically offered.
+
+Unsafe declarations retain their diagnostics; Fix All can still fix safe declarations elsewhere.
+These actions do not run automatically on save or ordinary formatting. After a package update, regenerate
+IDE project files and reload Rider. See [IDE integration](ide-integration.md) for details.
 
 ## Using StyleCop alongside this package
 
 StyleCop can continue to check general C# style. Check for ordering conflicts before enabling overlapping rules.
 For example, `SA1202` can require a public ordinary field before a private serialized field, while `DGUA001` with `first` requires the opposite.
+The same accessibility preference can conflict with private callbacks placed before public helper methods.
+Static-first method ordering can also conflict with DGUA002; use the placement option to match the project's policy.
 Configure or disable only the conflicting rule in the appropriate scope. This package does not change StyleCop settings automatically.
 
 ## Verification
 
-The initial implementation passed all 15 approved Roslyn tests and the Release build.
-Actual Unity import and Rider highlighting are not yet verified. See the [verification report](validation.md) for the scope of those checks.
+For per-assembly configuration, see [Assembly scope](assembly-scope.md).
+
+Version 0.2.0 passed the strict Release build and all 39 approved diagnostic/code-fix/integration tests.
+Actual Unity import and Rider Alt+Enter/Fix All UI are not yet verified. See the [verification report](validation.md) for the scope of those checks.

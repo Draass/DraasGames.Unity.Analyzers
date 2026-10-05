@@ -115,7 +115,7 @@ namespace DraasGames.Unity.Analyzers
                 serializedFieldsFirst ? "before" : "after"));
         }
 
-        private static bool IsStaticOrConst(FieldDeclarationSyntax fieldDeclaration)
+        internal static bool IsStaticOrConst(FieldDeclarationSyntax fieldDeclaration)
         {
             foreach (var modifier in fieldDeclaration.Modifiers)
             {
@@ -128,7 +128,7 @@ namespace DraasGames.Unity.Analyzers
             return false;
         }
 
-        private static bool HasSerializedMarker(IFieldSymbol fieldSymbol)
+        internal static bool HasSerializedMarker(IFieldSymbol fieldSymbol)
         {
             foreach (var attribute in fieldSymbol.GetAttributes())
             {

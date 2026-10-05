@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;RS2008</NoWarn>
+    <IsPackable>false</IsPackable>
+    <PackageId>DraasGames.Unity.Analyzers.CodeFixes</PackageId>
+    <Description>IDE code fixes for the DraasGames Unity ordering analyzers.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../DraasGames.Unity.Analyzers/DraasGames.Unity.Analyzers.csproj" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="3.8.0" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="3.3.4" PrivateAssets="all" />
+    <PackageReference Include="System.Composition" Version="1.0.31" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

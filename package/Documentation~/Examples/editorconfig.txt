@@ -3,4 +3,5 @@
 dotnet_diagnostic.DGUA001.severity = warning
 dotnet_diagnostic.DGUA002.severity = warning
 draas_unity_serialized_field_placement = first
+draas_unity_callbacks_before_other_methods = true
 draas_unity_callback_order = Reset,OnValidate,Awake,OnEnable,Start,FixedUpdate,Update,LateUpdate,OnDisable,OnDestroy

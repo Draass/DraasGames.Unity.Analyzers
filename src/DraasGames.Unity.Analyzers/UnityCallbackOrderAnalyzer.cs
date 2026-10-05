@@ -17,11 +17,11 @@ namespace DraasGames.Unity.Analyzers
         private static readonly DiagnosticDescriptor Rule = new DiagnosticDescriptor(
             DiagnosticId,
             "Unity callback order",
-            "Unity callback '{0}' appears after preceding callback '{1}', but the configured order requires '{0}' before it",
+            "Unity callback '{0}' appears after preceding method '{1}', but the configured order requires '{0}' before it",
             "DraasGames.Unity",
             DiagnosticSeverity.Warning,
             isEnabledByDefault: true,
-            description: "Unity callback methods should follow the configured callback order within each type declaration.");
+            description: "Unity callback methods should precede ordinary methods and follow the configured callback order within each type declaration.");
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
             ImmutableArray.Create(Rule);
@@ -60,10 +60,7 @@ namespace DraasGames.Unity.Analyzers
                 return;
             }
 
-            UnityTypeKind unityTypeKind = GetUnityTypeKind(
-                typeSymbol,
-                context.CancellationToken);
-            if (unityTypeKind == UnityTypeKind.None)
+            if (!UnityCallbackClassifier.IsUnityType(typeSymbol))
             {
                 return;
             }
@@ -72,17 +69,10 @@ namespace DraasGames.Unity.Analyzers
                 context.Options.AnalyzerConfigOptionsProvider,
                 typeDeclaration.SyntaxTree);
             Dictionary<string, int> rankByCallback = CreateRankMap(effectiveSettings.CallbackOrder);
-            if (rankByCallback.Count == 0)
-            {
-                return;
-            }
-
-            INamedTypeSymbol? coroutineType = unityTypeKind == UnityTypeKind.MonoBehaviour
-                ? context.SemanticModel.Compilation.GetTypeByMetadataName("System.Collections.IEnumerator")
-                : null;
 
             int highestRank = -1;
             string? highestCallbackName = null;
+            string? firstOrdinaryMethodName = null;
 
             foreach (MemberDeclarationSyntax member in typeDeclaration.Members)
             {
@@ -93,43 +83,45 @@ namespace DraasGames.Unity.Analyzers
                     continue;
                 }
 
-                string callbackName = methodDeclaration.Identifier.ValueText;
-                if (!rankByCallback.TryGetValue(callbackName, out int callbackRank))
-                {
-                    continue;
-                }
-
-                if (!IsCallbackNameAllowed(unityTypeKind, callbackName))
-                {
-                    continue;
-                }
-
+                string methodName = methodDeclaration.Identifier.ValueText;
                 IMethodSymbol? methodSymbol = context.SemanticModel.GetDeclaredSymbol(
                     methodDeclaration,
                     context.CancellationToken);
-                if (methodSymbol is null || !IsValidCallbackMethod(
-                        methodDeclaration,
+                if (methodSymbol is null
+                    || !UnityCallbackClassifier.IsUnityMethod(
                         methodSymbol,
-                        unityTypeKind,
-                        callbackName,
-                        coroutineType))
+                        context.CancellationToken))
                 {
+                    firstOrdinaryMethodName ??= methodName;
                     continue;
                 }
 
-                if (highestRank >= 0 && callbackRank < highestRank)
+                bool placementViolation = effectiveSettings.CallbacksBeforeOtherMethods
+                    && firstOrdinaryMethodName is not null;
+                bool hasConfiguredRank = rankByCallback.TryGetValue(
+                    methodName,
+                    out int callbackRank);
+                bool relativeOrderViolation = hasConfiguredRank
+                    && highestRank >= 0
+                    && callbackRank < highestRank;
+                if (placementViolation || relativeOrderViolation)
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
                         Rule,
                         methodDeclaration.Identifier.GetLocation(),
-                        callbackName,
-                        highestCallbackName!));
+                        methodName,
+                        placementViolation ? firstOrdinaryMethodName! : highestCallbackName!));
+                }
+
+                if (!hasConfiguredRank)
+                {
+                    continue;
                 }
 
                 if (callbackRank > highestRank)
                 {
                     highestRank = callbackRank;
-                    highestCallbackName = callbackName;
+                    highestCallbackName = methodName;
                 }
             }
         }
@@ -147,104 +139,6 @@ namespace DraasGames.Unity.Analyzers
             }
 
             return rankByCallback;
-        }
-
-        private static UnityTypeKind GetUnityTypeKind(
-            INamedTypeSymbol typeSymbol,
-            CancellationToken cancellationToken)
-        {
-            for (INamedTypeSymbol? current = typeSymbol; current is not null; current = current.BaseType)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                if (IsUnityType(current, "MonoBehaviour"))
-                {
-                    return UnityTypeKind.MonoBehaviour;
-                }
-
-                if (IsUnityType(current, "ScriptableObject"))
-                {
-                    return UnityTypeKind.ScriptableObject;
-                }
-            }
-
-            return UnityTypeKind.None;
-        }
-
-        private static bool IsUnityType(INamedTypeSymbol typeSymbol, string typeName)
-        {
-            return string.Equals(typeSymbol.Name, typeName, StringComparison.Ordinal)
-                && typeSymbol.Arity == 0
-                && typeSymbol.ContainingType is null
-                && string.Equals(
-                    typeSymbol.ContainingNamespace?.ToDisplayString(),
-                    "UnityEngine",
-                    StringComparison.Ordinal);
-        }
-
-        private static bool IsCallbackNameAllowed(UnityTypeKind unityTypeKind, string callbackName)
-        {
-            if (unityTypeKind == UnityTypeKind.MonoBehaviour)
-            {
-                return callbackName == "Reset"
-                    || callbackName == "OnValidate"
-                    || callbackName == "Awake"
-                    || callbackName == "OnEnable"
-                    || callbackName == "Start"
-                    || callbackName == "FixedUpdate"
-                    || callbackName == "Update"
-                    || callbackName == "LateUpdate"
-                    || callbackName == "OnDisable"
-                    || callbackName == "OnDestroy";
-            }
-
-            return unityTypeKind == UnityTypeKind.ScriptableObject
-                && (callbackName == "OnValidate"
-                    || callbackName == "Awake"
-                    || callbackName == "OnEnable"
-                    || callbackName == "OnDisable"
-                    || callbackName == "OnDestroy");
-        }
-
-        private static bool IsValidCallbackMethod(
-            MethodDeclarationSyntax methodDeclaration,
-            IMethodSymbol methodSymbol,
-            UnityTypeKind unityTypeKind,
-            string callbackName,
-            INamedTypeSymbol? coroutineType)
-        {
-            if (methodDeclaration.Body is null && methodDeclaration.ExpressionBody is null)
-            {
-                return false;
-            }
-
-            if (methodSymbol.MethodKind != MethodKind.Ordinary
-                || methodSymbol.IsStatic
-                || methodSymbol.IsAbstract
-                || methodSymbol.IsGenericMethod
-                || methodSymbol.Parameters.Length != 0
-                || methodSymbol.ReturnsByRef
-                || methodSymbol.ReturnsByRefReadonly)
-            {
-                return false;
-            }
-
-            if (methodSymbol.ReturnsVoid)
-            {
-                return true;
-            }
-
-            return unityTypeKind == UnityTypeKind.MonoBehaviour
-                && callbackName == "Start"
-                && coroutineType is not null
-                && SymbolEqualityComparer.Default.Equals(methodSymbol.ReturnType, coroutineType);
-        }
-
-        private enum UnityTypeKind
-        {
-            None,
-            MonoBehaviour,
-            ScriptableObject
         }
     }
 }

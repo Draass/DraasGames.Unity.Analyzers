@@ -1,0 +1,16 @@
+{
+  "name": "DraasGames.Unity.Analyzers.Editor",
+  "rootNamespace": "DraasGames.Unity.Analyzers.Editor",
+  "references": [],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

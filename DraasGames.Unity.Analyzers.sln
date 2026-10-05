@@ -7,6 +7,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{D6B1D93F-470
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DraasGames.Unity.Analyzers", "src\DraasGames.Unity.Analyzers\DraasGames.Unity.Analyzers.csproj", "{60B19A59-5299-4BD3-8478-5E06FBB5CBF0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DraasGames.Unity.Analyzers.CodeFixes", "src\DraasGames.Unity.Analyzers.CodeFixes\DraasGames.Unity.Analyzers.CodeFixes.csproj", "{0DE0EB3E-D1CE-40EC-B151-F10E2E06DAB1}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{28BA8FDB-8924-4B88-A9E6-8501BB8CB247}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DraasGames.Unity.Analyzers.Tests", "tests\DraasGames.Unity.Analyzers.Tests\DraasGames.Unity.Analyzers.Tests.csproj", "{0E178927-A162-4C48-AB9F-81DB5569097A}"
@@ -24,6 +26,10 @@ Global
 		{60B19A59-5299-4BD3-8478-5E06FBB5CBF0}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{60B19A59-5299-4BD3-8478-5E06FBB5CBF0}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{60B19A59-5299-4BD3-8478-5E06FBB5CBF0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0DE0EB3E-D1CE-40EC-B151-F10E2E06DAB1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0DE0EB3E-D1CE-40EC-B151-F10E2E06DAB1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0DE0EB3E-D1CE-40EC-B151-F10E2E06DAB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0DE0EB3E-D1CE-40EC-B151-F10E2E06DAB1}.Release|Any CPU.Build.0 = Release|Any CPU
 		{0E178927-A162-4C48-AB9F-81DB5569097A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0E178927-A162-4C48-AB9F-81DB5569097A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0E178927-A162-4C48-AB9F-81DB5569097A}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -31,6 +37,7 @@ Global
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{60B19A59-5299-4BD3-8478-5E06FBB5CBF0} = {D6B1D93F-4708-477F-8844-41EEFFA1F8B8}
+		{0DE0EB3E-D1CE-40EC-B151-F10E2E06DAB1} = {D6B1D93F-4708-477F-8844-41EEFFA1F8B8}
 		{0E178927-A162-4C48-AB9F-81DB5569097A} = {28BA8FDB-8924-4B88-A9E6-8501BB8CB247}
 	EndGlobalSection
 EndGlobal

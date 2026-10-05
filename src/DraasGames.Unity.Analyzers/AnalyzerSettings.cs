@@ -13,6 +13,7 @@ namespace DraasGames.Unity.Analyzers
     {
         private const string PlacementKey = "draas_unity_serialized_field_placement";
         private const string OrderKey = "draas_unity_callback_order";
+        private const string CallbacksBeforeOtherMethodsKey = "draas_unity_callbacks_before_other_methods";
         private const string AdditionalFileSuffix = ".DraasGames.Unity.Analyzers.additionalfile";
         private const string DefaultOrderText =
             "Reset,OnValidate,Awake,OnEnable,Start,FixedUpdate,Update,LateUpdate,OnDisable,OnDestroy";
@@ -22,18 +23,26 @@ namespace DraasGames.Unity.Analyzers
 
         private readonly string placementText;
         private readonly string orderText;
+        private readonly string callbacksBeforeOtherMethodsText;
 
-        private AnalyzerSettings(string placementText, string orderText)
+        private AnalyzerSettings(
+            string placementText,
+            string orderText,
+            string callbacksBeforeOtherMethodsText)
         {
             this.placementText = placementText;
             this.orderText = orderText;
+            this.callbacksBeforeOtherMethodsText = callbacksBeforeOtherMethodsText;
             SerializedFieldsFirst = placementText.Trim() != "last";
             CallbackOrder = ParseOrder(orderText);
+            CallbacksBeforeOtherMethods = ParseBool(callbacksBeforeOtherMethodsText);
         }
 
         public bool SerializedFieldsFirst { get; }
 
         public ImmutableArray<string> CallbackOrder { get; }
+
+        public bool CallbacksBeforeOtherMethods { get; }
 
         public static AnalyzerSettings Load(AnalyzerOptions options, CancellationToken cancellationToken)
         {
@@ -64,7 +73,9 @@ namespace DraasGames.Unity.Analyzers
                     }
 
                     var key = entry.Substring(0, equals).Trim();
-                    if (key == PlacementKey || key == OrderKey)
+                    if (key == PlacementKey
+                        || key == OrderKey
+                        || key == CallbacksBeforeOtherMethodsKey)
                     {
                         values[key] = entry.Substring(equals + 1).Trim();
                     }
@@ -73,7 +84,10 @@ namespace DraasGames.Unity.Analyzers
 
             return new AnalyzerSettings(
                 values.TryGetValue(PlacementKey, out var placement) ? placement : "first",
-                values.TryGetValue(OrderKey, out var order) ? order : DefaultOrderText);
+                values.TryGetValue(OrderKey, out var order) ? order : DefaultOrderText,
+                values.TryGetValue(CallbacksBeforeOtherMethodsKey, out var callbacksBeforeOtherMethods)
+                    ? callbacksBeforeOtherMethods
+                    : "true");
         }
 
         public AnalyzerSettings ForTree(AnalyzerConfigOptionsProvider provider, SyntaxTree tree)
@@ -81,14 +95,20 @@ namespace DraasGames.Unity.Analyzers
             var options = provider.GetOptions(tree);
             var hasPlacement = options.TryGetValue(PlacementKey, out var placement);
             var hasOrder = options.TryGetValue(OrderKey, out var order);
-            if (!hasPlacement && !hasOrder)
+            var hasCallbacksBeforeOtherMethods = options.TryGetValue(
+                CallbacksBeforeOtherMethodsKey,
+                out var callbacksBeforeOtherMethods);
+            if (!hasPlacement && !hasOrder && !hasCallbacksBeforeOtherMethods)
             {
                 return this;
             }
 
             return new AnalyzerSettings(
                 hasPlacement ? placement ?? string.Empty : placementText,
-                hasOrder ? order ?? string.Empty : orderText);
+                hasOrder ? order ?? string.Empty : orderText,
+                hasCallbacksBeforeOtherMethods
+                    ? callbacksBeforeOtherMethods ?? string.Empty
+                    : callbacksBeforeOtherMethodsText);
         }
 
         private static bool IsConfigurationFile(AdditionalText file)
@@ -120,6 +140,11 @@ namespace DraasGames.Unity.Analyzers
             }
 
             return result.ToImmutable();
+        }
+
+        private static bool ParseBool(string text)
+        {
+            return bool.TryParse(text.Trim(), out var value) ? value : true;
         }
     }
 }

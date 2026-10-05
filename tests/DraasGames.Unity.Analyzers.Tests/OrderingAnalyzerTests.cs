@@ -21,8 +21,102 @@ namespace UnityEngine
     public sealed class SerializeReference : System.Attribute { }
 
     public class Object { }
-    public class MonoBehaviour : Object { }
+    public class Component : Object { }
+    public class Behaviour : Component { }
+    public class MonoBehaviour : Behaviour { }
     public class ScriptableObject : Object { }
+    public class Animator : Behaviour { }
+    public struct AnimatorStateInfo { }
+    public class AnimationClip : Object { }
+    public class AudioClip : Object { }
+    public class AudioSource : Behaviour { }
+    public class Camera : Behaviour { }
+    public class Collider : Component { }
+    public class Collider2D : Component { }
+    public class Collision { }
+    public class Collision2D { }
+    public class ControllerColliderHit { }
+    public class GameObject : Object { }
+    public class Material : Object { }
+    public class ParticleSystem : Component { }
+    public class Renderer : Component { }
+    public class Texture : Object { }
+    public class RenderTexture : Texture { }
+    public class Transform : Component { }
+    public class GUIContent { }
+    public class GUIStyle { }
+    public class Event { }
+    public struct Rect { }
+    public struct Vector2 { }
+    public struct Vector3 { }
+    public struct Quaternion { }
+    public struct Ray { }
+    public struct RaycastHit { }
+    public struct RaycastHit2D { }
+
+    public class StateMachineBehaviour : Object
+    {
+        public virtual void OnStateEnter(Animator animator, AnimatorStateInfo stateInfo, int layerIndex) { }
+    }
+
+    public interface ISerializationCallbackReceiver
+    {
+        void OnBeforeSerialize();
+        void OnAfterDeserialize();
+    }
+}
+
+namespace UnityEngine.EventSystems
+{
+    public class BaseEventData { }
+    public class PointerEventData : BaseEventData { }
+    public class UIBehaviour : UnityEngine.MonoBehaviour { }
+
+    public interface IPointerEnterHandler
+    {
+        void OnPointerEnter(PointerEventData eventData);
+    }
+}
+
+namespace UnityEngine.Playables
+{
+    public struct Playable { }
+    public interface INotification { }
+
+    public interface INotificationReceiver
+    {
+        void OnNotify(Playable origin, INotification notification, object context);
+    }
+}
+
+namespace UnityEngine.Networking
+{
+    public class NetworkBehaviour : UnityEngine.MonoBehaviour { }
+}
+
+namespace UnityEditor
+{
+    public class SerializedProperty { }
+
+    public class EditorWindow
+    {
+        public virtual void CreateGUI() { }
+    }
+
+    public class Editor
+    {
+        public virtual void OnInspectorGUI() { }
+    }
+
+    public class PropertyDrawer
+    {
+        public virtual void OnGUI(
+            UnityEngine.Rect position,
+            SerializedProperty property,
+            UnityEngine.GUIContent label) { }
+    }
+
+    public class AssetPostprocessor { }
 }
 
 namespace Sirenix.Serialization
@@ -289,7 +383,10 @@ public sealed class InvalidAsset : ScriptableObject
 }
 ");
 
-        var diagnostics = await AnalyzeAsync(source);
+        var placementDisabled = Settings(
+            "PlacementDisabled.DraasGames.Unity.Analyzers.additionalfile",
+            "draas_unity_callbacks_before_other_methods = false\n");
+        var diagnostics = await AnalyzeAsync(source, placementDisabled);
 
         AssertDiagnostics(diagnostics);
     }
@@ -342,28 +439,65 @@ public sealed class FileGenerated : MonoBehaviour
     [Fact]
     public async Task EditorConfig_OverridesAdditionalFile()
     {
-        var source = UnitySource(@"
-public sealed class Example : MonoBehaviour
+        var firstDirectionSource = UnitySource(@"
+public sealed class FirstDirection : MonoBehaviour
 {
     [SerializeField] public int markedField;
     public int ordinaryField;
+    public void Helper() { }
     public void Update() { }
     public void Awake() { }
 }
-");
-        var settings = Settings(
-            "Settings.DraasGames.Unity.Analyzers.additionalfile",
+", filePath: "EditorConfig.First.cs");
+        var firstDirectionSettings = Settings(
+            "First.DraasGames.Unity.Analyzers.additionalfile",
             "draas_unity_serialized_field_placement = first\n" +
-            "draas_unity_callback_order = Reset,OnValidate,Awake,OnEnable,Start,FixedUpdate,Update,LateUpdate,OnDisable,OnDestroy\n");
-        var treeOptions = new Dictionary<string, string>(StringComparer.Ordinal)
+            "draas_unity_callback_order = Update,Awake\n" +
+            "draas_unity_callbacks_before_other_methods = false\n");
+        var firstDirectionOptions = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["draas_unity_serialized_field_placement"] = "last",
-            ["draas_unity_callback_order"] = "Update,Awake"
+            ["draas_unity_callback_order"] = "Update,Awake",
+            ["draas_unity_callbacks_before_other_methods"] = "true"
         };
 
-        var diagnostics = await AnalyzeAsync(source, settings, treeOptions);
+        var secondDirectionSource = UnitySource(@"
+public sealed class SecondDirection : MonoBehaviour
+{
+    [SerializeField] public int markedField;
+    public int ordinaryField;
+    public void Helper() { }
+    public void Update() { }
+    public void Awake() { }
+}
+", filePath: "EditorConfig.Second.cs");
+        var secondDirectionSettings = Settings(
+            "Second.DraasGames.Unity.Analyzers.additionalfile",
+            "draas_unity_serialized_field_placement = last\n" +
+            "draas_unity_callback_order = Update,Awake\n" +
+            "draas_unity_callbacks_before_other_methods = true\n");
+        var secondDirectionOptions = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["draas_unity_serialized_field_placement"] = "first",
+            ["draas_unity_callback_order"] = "Update,Awake",
+            ["draas_unity_callbacks_before_other_methods"] = "false"
+        };
 
-        AssertDiagnostics(diagnostics, Expect("DGUA001", source, "ordinaryField"));
+        var firstDirectionDiagnostics = await AnalyzeAsync(
+            firstDirectionSource,
+            firstDirectionSettings,
+            firstDirectionOptions);
+        var secondDirectionDiagnostics = await AnalyzeAsync(
+            secondDirectionSource,
+            secondDirectionSettings,
+            secondDirectionOptions);
+
+        AssertDiagnostics(
+            firstDirectionDiagnostics,
+            Expect("DGUA001", firstDirectionSource, "ordinaryField"),
+            Expect("DGUA002", firstDirectionSource, "Update"),
+            Expect("DGUA002", firstDirectionSource, "Awake"));
+        AssertDiagnostics(secondDirectionDiagnostics);
     }
 
     [Fact]
@@ -390,6 +524,13 @@ public sealed class EmptyCallbackExample : MonoBehaviour
     public void Awake() { }
 }
 ");
+        var invalidBooleanSource = UnitySource(@"
+public sealed class InvalidBooleanExample : MonoBehaviour
+{
+    public void Helper() { }
+    public void Awake() { }
+}
+");
 
         var invalidPlacement = Settings(
             "InvalidPlacement.DraasGames.Unity.Analyzers.additionalfile",
@@ -403,16 +544,30 @@ public sealed class EmptyCallbackExample : MonoBehaviour
         var emptyCallbacks = Settings(
             "EmptyCallbacks.DraasGames.Unity.Analyzers.additionalfile",
             "draas_unity_callback_order = \n");
+        var invalidBoolean = Settings(
+            "InvalidBoolean.DraasGames.Unity.Analyzers.additionalfile",
+            "draas_unity_callbacks_before_other_methods = maybe\n");
+        var emptyBoolean = Settings(
+            "EmptyBoolean.DraasGames.Unity.Analyzers.additionalfile",
+            "draas_unity_callbacks_before_other_methods = \n");
 
         var placementDiagnostics = await AnalyzeAsync(placementSource, invalidPlacement);
         var duplicateDiagnostics = await AnalyzeAsync(duplicateCallbackSource, duplicateCallbacks);
         var unknownDiagnostics = await AnalyzeAsync(duplicateCallbackSource, unknownCallbacks);
         var emptyDiagnostics = await AnalyzeAsync(emptyCallbackSource, emptyCallbacks);
+        var invalidBooleanDiagnostics = await AnalyzeAsync(invalidBooleanSource, invalidBoolean);
+        var emptyBooleanDiagnostics = await AnalyzeAsync(invalidBooleanSource, emptyBoolean);
 
         AssertDiagnostics(placementDiagnostics, Expect("DGUA001", placementSource, "markedField"));
         AssertDiagnostics(duplicateDiagnostics, Expect("DGUA002", duplicateCallbackSource, "Awake"));
         AssertDiagnostics(unknownDiagnostics, Expect("DGUA002", duplicateCallbackSource, "Awake"));
         AssertDiagnostics(emptyDiagnostics, Expect("DGUA002", emptyCallbackSource, "Awake"));
+        AssertDiagnostics(
+            invalidBooleanDiagnostics,
+            Expect("DGUA002", invalidBooleanSource, "Awake"));
+        AssertDiagnostics(
+            emptyBooleanDiagnostics,
+            Expect("DGUA002", invalidBooleanSource, "Awake"));
     }
 
     [Fact]
@@ -475,6 +630,452 @@ public sealed class CallbackExample : MonoBehaviour
         AssertDiagnostics(callbackDiagnostics);
     }
 
+    [Fact]
+    public async Task UnityCallbackAfterOrdinaryMethod_Reports()
+    {
+        var monoSource = UnitySource(@"
+public sealed class PlacementBehaviour : MonoBehaviour
+{
+    public void Helper() { }
+    public static void StaticHelper() { }
+    public void GenericHelper<T>() { }
+    public override string ToString() { return ""ordinary""; }
+    public void Update() { }
+    public void Awake() { }
+    public void OnEnable() { }
+}
+", filePath: "Placement.Mono.cs");
+        var assetSource = UnitySource(@"
+public sealed class PlacementAsset : ScriptableObject
+{
+    public void Helper() { }
+    public void Awake() { }
+    public void OnDisable() { }
+}
+", filePath: "Placement.Asset.cs");
+
+        var diagnostics = await AnalyzeAsync(monoSource, assetSource);
+
+        AssertDiagnostics(
+            diagnostics,
+            Expect("DGUA002", monoSource, "Update"),
+            Expect("DGUA002", monoSource, "Awake"),
+            Expect("DGUA002", monoSource, "OnEnable"),
+            Expect("DGUA002", assetSource, "Awake"),
+            Expect("DGUA002", assetSource, "OnDisable"));
+    }
+
+    [Fact]
+    public async Task UnityCallbacksBeforeOrdinaryMethods_NoDiagnostic()
+    {
+        var source = UnitySource(@"
+public sealed class ValidPlacement : MonoBehaviour
+{
+    public int fieldBefore;
+    public ValidPlacement() { }
+    public int PropertyBefore { get; set; }
+    public void Awake() { }
+    public void Update() { }
+    public int fieldAfter;
+    public int PropertyAfter { get; set; }
+    public void Helper() { }
+}
+");
+
+        var diagnostics = await AnalyzeAsync(source);
+
+        AssertDiagnostics(diagnostics);
+    }
+
+    [Fact]
+    public async Task CallbackPlacementDisabled_PreservesRelativeOrder()
+    {
+        var source = UnitySource(@"
+public sealed class DisabledPlacement : MonoBehaviour
+{
+    public void Helper() { }
+    public void Update() { }
+    public void Awake() { }
+}
+");
+        var settings = Settings(
+            "PlacementFalse.DraasGames.Unity.Analyzers.additionalfile",
+            "draas_unity_callbacks_before_other_methods = false\n");
+
+        var diagnostics = await AnalyzeAsync(source, settings);
+
+        AssertDiagnostics(diagnostics, Expect("DGUA002", source, "Awake"));
+    }
+
+    [Fact]
+    public async Task UnrankedUnityCallbacks_StillPrecedeOrdinaryMethods()
+    {
+        var source = UnitySource(@"
+public sealed class UnrankedCallbacks : MonoBehaviour
+{
+    public void Helper() { }
+    public void Update() { }
+    public void OnTriggerEnter(Collider value) { }
+    public void Start() { }
+    public void OnDestroy() { }
+    public void Awake() { }
+}
+");
+        var beforeHelperSource = UnitySource(@"
+public sealed class UnrankedCallbacksBeforeHelper : MonoBehaviour
+{
+    public void Update() { }
+    public void OnTriggerEnter(Collider value) { }
+    public void Start() { }
+    public void OnDestroy() { }
+    public void Awake() { }
+    public void Helper() { }
+}
+", filePath: "Unranked.BeforeHelper.cs");
+        var settings = Settings(
+            "Subset.DraasGames.Unity.Analyzers.additionalfile",
+            "draas_unity_callback_order = Update,Awake\n");
+
+        var diagnostics = await AnalyzeAsync(
+            new[] { source, beforeHelperSource },
+            new[] { settings },
+            null,
+            null);
+
+        AssertDiagnostics(
+            diagnostics,
+            Expect("DGUA002", source, "Update"),
+            Expect("DGUA002", source, "OnTriggerEnter"),
+            Expect("DGUA002", source, "Start"),
+            Expect("DGUA002", source, "OnDestroy"),
+            Expect("DGUA002", source, "Awake"));
+        AssertDiagnostics(
+            diagnostics
+                .Where(diagnostic =>
+                    diagnostic.Location.SourceTree?.FilePath == beforeHelperSource.FilePath)
+                .ToImmutableArray());
+    }
+
+    [Fact]
+    public async Task ExtendedUnityMessages_RespectSignatures()
+    {
+        var physicsSource = UnitySource(@"
+public sealed class PhysicsMessages : MonoBehaviour
+{
+    public void Helper() { }
+    public void OnCollisionEnter(Collision value) { }
+    public void OnCollisionEnter2D(Collision2D value) { }
+    public void OnTriggerEnter(Collider value) { }
+    public void OnTriggerEnter2D(Collider2D value) { }
+}
+", filePath: "Extended.Physics.cs");
+        var applicationSource = UnitySource(@"
+public sealed class ApplicationMessages : MonoBehaviour
+{
+    public void Helper() { }
+    public void OnApplicationFocus(bool value) { }
+    public void OnApplicationPause(bool value) { }
+}
+", filePath: "Extended.Application.cs");
+        var audioRenderSource = UnitySource(@"
+public sealed class AudioRenderMessages : MonoBehaviour
+{
+    public void Helper() { }
+    public void OnAudioFilterRead(float[] data, int channels) { }
+    public void OnRenderImage(RenderTexture source, RenderTexture destination) { }
+}
+", filePath: "Extended.AudioRender.cs");
+        var transformParticleGuiSource = UnitySource(@"
+public sealed class TransformParticleGuiMessages : MonoBehaviour
+{
+    public void Helper() { }
+    public void OnTransformChildrenChanged() { }
+    public void OnParticleCollision(GameObject value) { }
+    public void OnGUI() { }
+}
+", filePath: "Extended.TransformParticleGui.cs");
+        var scriptableObjectSource = UnitySource(@"
+public sealed class ScriptableAsset : ScriptableObject
+{
+    public void Helper() { }
+    public void Reset() { }
+}
+", filePath: "Extended.ScriptableObject.cs");
+        var editorWindowSource = UnitySource(@"
+public sealed class WindowMessages : UnityEditor.EditorWindow
+{
+    public void Helper() { }
+    public void CreateGUI() { }
+}
+", filePath: "Extended.EditorWindow.cs");
+        var assetPostprocessorSource = UnitySource(@"
+public sealed class ImportMessages : UnityEditor.AssetPostprocessor
+{
+    public void Helper() { }
+
+    public static void OnPostprocessAllAssets(
+        string[] importedAssets,
+        string[] deletedAssets,
+        string[] movedAssets,
+        string[] movedFromAssetPaths) { }
+}
+", filePath: "Extended.AssetPostprocessor.cs");
+        var wrongCounterpartsSource = UnitySource(@"
+public sealed class WrongMessageSignatures : MonoBehaviour
+{
+    public void OnCollisionEnter(int value) { }
+    public void OnApplicationFocus(int value) { }
+    public void OnAudioFilterRead(float data, int channels) { }
+    public void OnRenderImage(RenderTexture source) { }
+    public void OnTransformChildrenChanged(int value) { }
+    public void OnParticleCollision(int value) { }
+    public void OnGUI(int value) { }
+    public void Awake() { }
+}
+", filePath: "Extended.WrongSignatures.cs");
+
+        var diagnostics = await AnalyzeAsync(
+            physicsSource,
+            applicationSource,
+            audioRenderSource,
+            transformParticleGuiSource,
+            scriptableObjectSource,
+            editorWindowSource,
+            assetPostprocessorSource,
+            wrongCounterpartsSource);
+
+        AssertDiagnostics(
+            diagnostics,
+            Expect("DGUA002", physicsSource, "OnCollisionEnter"),
+            Expect("DGUA002", physicsSource, "OnCollisionEnter2D"),
+            Expect("DGUA002", physicsSource, "OnTriggerEnter"),
+            Expect("DGUA002", physicsSource, "OnTriggerEnter2D"),
+            Expect("DGUA002", applicationSource, "OnApplicationFocus"),
+            Expect("DGUA002", applicationSource, "OnApplicationPause"),
+            Expect("DGUA002", audioRenderSource, "OnAudioFilterRead"),
+            Expect("DGUA002", audioRenderSource, "OnRenderImage"),
+            Expect("DGUA002", transformParticleGuiSource, "OnTransformChildrenChanged"),
+            Expect("DGUA002", transformParticleGuiSource, "OnParticleCollision"),
+            Expect("DGUA002", transformParticleGuiSource, "OnGUI"),
+            Expect("DGUA002", scriptableObjectSource, "Reset"),
+            Expect("DGUA002", editorWindowSource, "CreateGUI"),
+            Expect("DGUA002", assetPostprocessorSource, "OnPostprocessAllAssets"),
+            Expect("DGUA002", wrongCounterpartsSource, "Awake"));
+    }
+
+    [Fact]
+    public async Task UnityApiOverrides_AreGroupedBeforeOrdinaryMethods()
+    {
+        var stateBaseSource = UnitySource(@"
+public abstract class IntermediateState : UnityEngine.StateMachineBehaviour
+{
+    public override void OnStateEnter(
+        Animator animator,
+        AnimatorStateInfo stateInfo,
+        int layerIndex) { }
+}
+", filePath: "Overrides.StateBase.cs");
+        var stateSource = UnitySource(@"
+public sealed class ConcreteState : IntermediateState
+{
+    public void Helper() { }
+    public override void OnStateEnter(
+        Animator animator,
+        AnimatorStateInfo stateInfo,
+        int layerIndex) { }
+}
+", filePath: "Overrides.State.cs");
+        var editorSource = UnitySource(@"
+public abstract class IntermediateEditor : UnityEditor.Editor { }
+
+public sealed class ConcreteEditor : IntermediateEditor
+{
+    public void Helper() { }
+    public override void OnInspectorGUI() { }
+}
+", filePath: "Overrides.Editor.cs");
+        var drawerSource = UnitySource(@"
+public abstract class IntermediateDrawer : UnityEditor.PropertyDrawer { }
+
+public sealed class ConcreteDrawer : IntermediateDrawer
+{
+    public void Helper() { }
+    public override void OnGUI(
+        UnityEngine.Rect position,
+        UnityEditor.SerializedProperty property,
+        UnityEngine.GUIContent label) { }
+}
+", filePath: "Overrides.Drawer.cs");
+        var userSource = UnitySource(@"
+public abstract class UserBehaviour : MonoBehaviour
+{
+    public virtual void OnUserCallback() { }
+}
+
+public sealed class UserOverride : UserBehaviour
+{
+    public override void OnUserCallback() { }
+    public void Awake() { }
+}
+", filePath: "Overrides.User.cs");
+        var objectSource = UnitySource(@"
+public sealed class ObjectOverride : MonoBehaviour
+{
+    public override string ToString() { return ""ordinary""; }
+    public void Awake() { }
+}
+", filePath: "Overrides.Object.cs");
+
+        var diagnostics = await AnalyzeAsync(
+            stateBaseSource,
+            stateSource,
+            editorSource,
+            drawerSource,
+            userSource,
+            objectSource);
+
+        AssertDiagnostics(
+            diagnostics,
+            Expect("DGUA002", stateSource, "OnStateEnter"),
+            Expect("DGUA002", editorSource, "OnInspectorGUI"),
+            Expect("DGUA002", drawerSource, "OnGUI"),
+            Expect("DGUA002", userSource, "Awake"),
+            Expect("DGUA002", objectSource, "Awake"));
+    }
+
+    [Fact]
+    public async Task UnityInterfaceMethods_AreGroupedBeforeOrdinaryMethods()
+    {
+        var implicitSource = UnitySource(@"
+public sealed class ImplicitInterfaces : MonoBehaviour,
+    UnityEngine.ISerializationCallbackReceiver,
+    UnityEngine.EventSystems.IPointerEnterHandler,
+    UnityEngine.Playables.INotificationReceiver
+{
+    public void Helper() { }
+    public void OnBeforeSerialize() { }
+    public void OnAfterDeserialize() { }
+    public void OnPointerEnter(
+        UnityEngine.EventSystems.PointerEventData eventData) { }
+    public void OnNotify(
+        UnityEngine.Playables.Playable origin,
+        UnityEngine.Playables.INotification notification,
+        object context) { }
+}
+", filePath: "Interfaces.Implicit.cs");
+        var explicitSource = UnitySource(@"
+public sealed class ExplicitInterfaces :
+    UnityEngine.ISerializationCallbackReceiver,
+    UnityEngine.EventSystems.IPointerEnterHandler,
+    UnityEngine.Playables.INotificationReceiver
+{
+    public void Helper() { }
+
+    void UnityEngine.ISerializationCallbackReceiver.OnBeforeSerialize() { }
+    void UnityEngine.ISerializationCallbackReceiver.OnAfterDeserialize() { }
+    void UnityEngine.EventSystems.IPointerEnterHandler.OnPointerEnter(
+        UnityEngine.EventSystems.PointerEventData eventData) { }
+    void UnityEngine.Playables.INotificationReceiver.OnNotify(
+        UnityEngine.Playables.Playable origin,
+        UnityEngine.Playables.INotification notification,
+        object context) { }
+}
+", filePath: "Interfaces.Explicit.cs");
+        var lookalikeSource = UnitySource(@"
+public sealed class InterfaceLookalike : MonoBehaviour
+{
+    public void OnBeforeSerialize() { }
+    public void Awake() { }
+}
+", filePath: "Interfaces.Lookalike.cs");
+
+        var diagnostics = await AnalyzeAsync(
+            implicitSource,
+            explicitSource,
+            lookalikeSource);
+
+        AssertDiagnostics(
+            diagnostics,
+            Expect("DGUA002", implicitSource, "OnBeforeSerialize"),
+            Expect("DGUA002", implicitSource, "OnAfterDeserialize"),
+            Expect("DGUA002", implicitSource, "OnPointerEnter"),
+            Expect("DGUA002", implicitSource, "OnNotify"),
+            Expect("DGUA002", explicitSource, "OnBeforeSerialize"),
+            Expect("DGUA002", explicitSource, "OnAfterDeserialize"),
+            Expect("DGUA002", explicitSource, "OnPointerEnter"),
+            Expect("DGUA002", explicitSource, "OnNotify"),
+            Expect("DGUA002", lookalikeSource, "Awake"));
+    }
+
+    [Fact]
+    public async Task NonUnityLookalikes_DoNotBecomeUnityCallbacks()
+    {
+        var plainSource = UnitySource(@"
+public sealed class PlainLookalike
+{
+    public void Helper() { }
+    public void Update() { }
+    public void Awake() { }
+}
+", filePath: "Lookalikes.Plain.cs");
+        var wrongNamespaceSource = UnitySource(@"
+namespace Fake
+{
+    public sealed class Collision { }
+}
+
+public sealed class WrongParameterNamespace : MonoBehaviour
+{
+    public void OnCollisionEnter(Fake.Collision value) { }
+    public void Awake() { }
+}
+", filePath: "Lookalikes.Namespace.cs");
+        var wrongRefSource = UnitySource(@"
+public sealed class WrongRefKind : MonoBehaviour
+{
+    public void OnAudioFilterRead(ref float[] data, int channels) { }
+    public void Awake() { }
+}
+", filePath: "Lookalikes.Ref.cs");
+        var genericSource = UnitySource(@"
+public sealed class GenericImpostor : MonoBehaviour
+{
+    public void OnTriggerEnter<T>(Collider value) { }
+    public void Awake() { }
+}
+", filePath: "Lookalikes.Generic.cs");
+        var staticSource = UnitySource(@"
+public sealed class StaticImpostor : MonoBehaviour
+{
+    public static void OnTriggerEnter(Collider value) { }
+    public void Awake() { }
+}
+", filePath: "Lookalikes.Static.cs");
+        var arbitrarySource = UnitySource(@"
+public sealed class ArbitraryMessage : MonoBehaviour
+{
+    public void OnSomething() { }
+    public void Awake() { }
+}
+", filePath: "Lookalikes.Arbitrary.cs");
+
+        var diagnostics = await AnalyzeAsync(
+            plainSource,
+            wrongNamespaceSource,
+            wrongRefSource,
+            genericSource,
+            staticSource,
+            arbitrarySource);
+
+        AssertDiagnostics(
+            diagnostics,
+            Expect("DGUA002", wrongNamespaceSource, "Awake"),
+            Expect("DGUA002", wrongRefSource, "Awake"),
+            Expect("DGUA002", genericSource, "Awake"),
+            Expect("DGUA002", staticSource, "Awake"),
+            Expect("DGUA002", arbitrarySource, "Awake"));
+    }
+
     private static SourceInput UnitySource(string body, string prefix = "", string filePath = "Test.cs")
     {
         return new SourceInput(
@@ -514,13 +1115,21 @@ public sealed class CallbackExample : MonoBehaviour
         params ExpectedDiagnostic[] expected)
     {
         Assert.All(actual, diagnostic => Assert.NotEqual("AD0001", diagnostic.Id));
-        Assert.Equal(expected.Length, actual.Length);
+        Assert.True(
+            expected.Length == actual.Length,
+            "Expected " + expected.Length + " diagnostics but received: " +
+            string.Join(
+                ", ",
+                actual.Select(diagnostic =>
+                    diagnostic.Id + "@" +
+                    diagnostic.Location.SourceTree?.FilePath + ":" +
+                    diagnostic.Location.SourceSpan.Start)));
 
         foreach (var expectedDiagnostic in expected)
         {
-            var expectedStart = expectedDiagnostic.Source.Text.IndexOf(
-                expectedDiagnostic.Identifier,
-                StringComparison.Ordinal);
+            var expectedStart = FindIdentifier(
+                expectedDiagnostic.Source.Text,
+                expectedDiagnostic.Identifier);
             Assert.True(
                 expectedStart >= 0,
                 "The expected identifier was not found in the test source: " + expectedDiagnostic.Identifier);
@@ -533,7 +1142,17 @@ public sealed class CallbackExample : MonoBehaviour
                     diagnostic.Location.SourceSpan.Start == expectedStart)
                 .ToArray();
 
-            Assert.Single(matches);
+            Assert.True(
+                matches.Length == 1,
+                "Expected exactly one " + expectedDiagnostic.Id + " for " +
+                expectedDiagnostic.Identifier + " at character " + expectedStart +
+                "; actual starts: " +
+                string.Join(
+                    ", ",
+                    actual.Select(diagnostic =>
+                        diagnostic.Id + "@" +
+                        diagnostic.Location.SourceTree?.FilePath + ":" +
+                        diagnostic.Location.SourceSpan.Start)));
             var diagnostic = matches[0];
             Assert.Equal(
                 expectedDiagnostic.Identifier,
@@ -541,6 +1160,37 @@ public sealed class CallbackExample : MonoBehaviour
                     diagnostic.Location.SourceSpan.Start,
                     diagnostic.Location.SourceSpan.Length));
         }
+    }
+
+    private static int FindIdentifier(string text, string identifier)
+    {
+        var searchStart = 0;
+        while (searchStart < text.Length)
+        {
+            var index = text.IndexOf(identifier, searchStart, StringComparison.Ordinal);
+            if (index < 0)
+            {
+                return -1;
+            }
+
+            var beforeIsIdentifier = index > 0 && IsIdentifierCharacter(text[index - 1]);
+            var afterIndex = index + identifier.Length;
+            var afterIsIdentifier =
+                afterIndex < text.Length && IsIdentifierCharacter(text[afterIndex]);
+            if (!beforeIsIdentifier && !afterIsIdentifier)
+            {
+                return index;
+            }
+
+            searchStart = index + 1;
+        }
+
+        return -1;
+    }
+
+    private static bool IsIdentifierCharacter(char value)
+    {
+        return char.IsLetterOrDigit(value) || value == '_';
     }
 
     private static async Task<ImmutableArray<Diagnostic>> AnalyzeAsync(
